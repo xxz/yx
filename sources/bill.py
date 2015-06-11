@@ -14,16 +14,15 @@ import sys
 import mimetypes
 import ConfigParser
 import string
+import sys
+reload(sys)
+sys.setdefaultencoding('utf-8')
+
+import codecs
 
 
-mailto_list=["xiexuanzhong@vispractice.com"]
-mail_host=""
-mail_user=""
-mail_pass=""
-mail_postfix=""
-mail_title_prefix="[noreply]"
+#获取进入时间
 dt = datetime.now()
-
 
 #全局cache
 msg_buff = []
@@ -39,6 +38,8 @@ def trim(string):
         string = string.strip().replace('\r\n','').replace('\n','')
         return string
 
+
+
 class Worker:
     def __init__(self):
         self.conf = ConfigParser.ConfigParser()
@@ -47,10 +48,10 @@ class Worker:
         if self.is_exist(self.default_conf_file_path):
             self.default_conf_file_path = 'setting.conf'
         elif self.is_exist('../example/sample.setting.conf'):
-            print('在当前目录无法查找到设置文件，准备读取演示配置')
+            print(u'在当前目录无法查找到设置文件，准备读取演示配置')
             self.default_conf_file_path = '../example/sample.setting.conf'
         else:
-            print('无法找到配置文件')
+            print(u'无法找到配置文件')
             exit(12)
 
         self.conf.read(self.default_conf_file_path)
@@ -73,18 +74,22 @@ class mail_Worker(Worker):
             self.mail_pass = self.conf.get('mail','password')
             self.mail_postfix = self.conf.get('mail','postfix')
             self.mail_title_prefix = self.conf.get('mail','title_prefix')
-            self.mail_bill_name = self.conf.get('mail','bill_name').decode('utf-8')
+            self.mail_bill_name = self.conf.get('mail','bill_name')
 
         except ConfigParser.NoSectionError:
-            print('配置文件不正常')
+            print(u'配置文件不正常')
             exit(13)
         except ConfigParser.NoOptionError:
-            print('配置文件不正常')
+            print(u'配置文件不正常')
             exit(14)
 
-        self.s = smtplib.SMTP()
-        self.s.connect(self.mail_host)
-        self.s.login(self.mail_user,self.mail_pass)
+        try:
+            self.s = smtplib.SMTP()
+            self.s.connect(self.mail_host)
+            self.s.login(self.mail_user,self.mail_pass)
+        except Exception, e:
+            print str(e)
+            exit(18)
 
 
     def __del__(self):
@@ -99,22 +104,37 @@ class mail_Worker(Worker):
         content: content
         send_mail ("dblogs", "sub", "content")
         '''
-        self.me=self.mail_user+"<"+self.mail_user+"@"+self.mail_postfix+">"
-        self.msg = email.MIMEMultipart.MIMEMultipart()
 
-        self.msg=MIMEText(content,_subtype='html',_charset="utf-8")
-        self.msg['Subject'] = self.mail_title_prefix+dt.strftime('%Y/%m')+self.mail_bill_name
-        self.msg['From'] = self.me
-        self.msg['To'] = ";".join(to_list)
-        self.msg['date'] = ctime()
+        try:
 
+            self.me=self.mail_user+"<"+self.mail_user+"@"+self.mail_postfix+">"
+            self.msg = email.MIMEMultipart.MIMEMultipart()
+
+            self.msg=MIMEText(content,_subtype='html',_charset="utf-8")
+            self.msg['Subject'] = self.mail_title_prefix+dt.strftime('%Y/%m')+self.mail_bill_name
+            self.msg['From'] = self.me
+            self.msg['To'] = ";".join(to_list)
+            self.msg['date'] = ctime()
+        except UnicodeDecodeError:
+            self.mail_title_prefix = self.conf.get('mail','title_prefix').decode('gbk').encode('utf-8')
+            self.mail_bill_name = self.conf.get('mail','bill_name').decode('gbk').encode('utf-8')
+
+            self.me=self.mail_user+"<"+self.mail_user+"@"+self.mail_postfix+">"
+            self.msg = email.MIMEMultipart.MIMEMultipart()
+
+            self.msg=MIMEText(content,_subtype='html',_charset="utf-8")
+            self.msg['Subject'] = self.mail_title_prefix+dt.strftime('%Y/%m')+self.mail_bill_name
+            self.msg['From'] = self.me
+            self.msg['To'] = ";".join(to_list)
+            self.msg['date'] = ctime()
 
         try:
             self.s.sendmail(self.me, to_list, self.msg.as_string())
             return True
         except Exception, e:
             print str(e)
-            return False
+            print(u'检查配置文件中邮件配置部份')
+            exit(17)
 
 class msg_Worker(Worker):
     def __init__(self):
@@ -124,15 +144,12 @@ class msg_Worker(Worker):
             self.template_footer = self.conf.get('template','footer')
             self.datafile = self.conf.get('data','datafile')
 
-
         except ConfigParser.NoSectionError:
-            print('配置文件不正常')
+            print(u'配置文件不正常')
             exit(13)
         except ConfigParser.NoOptionError:
-            print('配置文件不正常')
+            print(u'配置文件不正常')
             exit(14)
-
-
 
         #始初化模版
         if self.is_exist(self.template_header) & self.is_exist(self.template_footer):
@@ -143,16 +160,31 @@ class msg_Worker(Worker):
             self.msg_footer = trim(fp.read())
             fp.close()
         else:
-            print('读取模版出问题了')
+            print(u'读取模版出问题了')
             exit(16)
 
 
     def csv_map(self):
         if (self.is_exist(self.datafile)):
+            BLOCKSIZE = 8438
+            with codecs.open(self.datafile, "r", "gbk") as sourceFile:
+                with codecs.open('swap', "w", "utf-8") as targetFile:
+                    while True:
+                        try:
+                            contents = sourceFile.read(BLOCKSIZE)
+                            if not contents:
+                                break
+                            targetFile.write(contents)
+                            self.datafile='swap'
+                        except UnicodeDecodeError:
+                            #print('文档编码错误,尝试使用别的编码打开文档')
+                            pass
+
             reader = csv.reader(open(self.datafile))
         else:
-            print('读取演示数据，并准备发送')
+            print(u'读取演示数据，并准备发送')
             reader = csv.reader(open("../example/sample.csv"))
+
         index_of_msg_key = 0
         for row in reader:
             if(len(row)==0):
@@ -162,6 +194,7 @@ class msg_Worker(Worker):
                 msg_buff.append(row)
 
         for key in msg_buff[0]:
+
             if trim(key) == '序号':
                 keyword_map["k0"] = index_of_msg_key
             elif trim(key) == '姓名':
@@ -253,26 +286,40 @@ class msg_Worker(Worker):
 
 
 if __name__ == '__main__':
-
+    print(u'开始读取数据')
     w1 = msg_Worker()
     w1.csv_map()
+    print(u'读取数据结束')
     w2 = mail_Worker()
-
+    print(u'开始发送邮件')
     msg_count = len(msg_buff);
-    print('总共有'+str(msg_count-1)+'封邮件需要发送')
+    print(u'总共有'+str(msg_count-1)+u'封邮件需要发送')
 
     for i in range(1, msg_count):
         msg_body = w1.msg_generator(msg_buff[i])
         mailto_list = msg_buff[i][keyword_map["email"]]
         sleep(0.1)
         if w2.send(mailto_list,msg_body):
-            print '第'+str(i)+'邮件['+msg_buff[i][keyword_map["name"]]+':'+msg_buff[i][keyword_map["email"]]+']发送成功!'
+            try:
+                name=msg_buff[i][keyword_map["name"]].decode('ascii').encode('utf-8')
+                tips_info = u'第'+str(i)+u'邮件<'+name+ u':'+msg_buff[i][keyword_map["email"]]+u']成功!'
+            except UnicodeDecodeError:
+                name=msg_buff[i][keyword_map["name"]]
+                tips_info = u'第'+str(i)+u'邮件['+name+ u':'+msg_buff[i][keyword_map["email"]]+u']成功!'
+
+            print(tips_info)
         else:
-            print '第'+str(i)+'邮件['+msg_buff[i][keyword_map["name"]]+':'+msg_buff[i][keyword_map["email"]]+']发送失败!'
+            try:
+                name=msg_buff[i][keyword_map["name"]].decode('ascii').encode('utf-8')
+                tips_info = u'第'+str(i)+u'邮件<'+name+ u':'+msg_buff[i][keyword_map["email"]]+u']成功!'
+            except UnicodeDecodeError:
+                name=msg_buff[i][keyword_map["name"]]
+                tips_info = u'第'+str(i)+u'邮件['+name+ u':'+msg_buff[i][keyword_map["email"]]+u']成功!'
 
+            print(tips_info)
 
-    print("全部工作完成")
-
+    print(u"全部工作完成")
+    sleep(10)
 
 
 
