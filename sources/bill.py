@@ -112,21 +112,29 @@ class mail_Worker(Worker):
 
             self.msg=MIMEText(content,_subtype='html',_charset="utf-8")
             self.msg['Subject'] = self.mail_title_prefix+dt.strftime('%Y/%m')+self.mail_bill_name
+            self.msg['Subject'] = self.msg['Subject'].encode('gbk')
+
             self.msg['From'] = self.me
             self.msg['To'] = ";".join(to_list)
             self.msg['date'] = ctime()
+            print('aaa')
+
+            print(self.msg['Subject'])
         except UnicodeDecodeError:
-            self.mail_title_prefix = self.conf.get('mail','title_prefix').decode('gbk').encode('utf-8')
-            self.mail_bill_name = self.conf.get('mail','bill_name').decode('gbk').encode('utf-8')
+            self.mail_title_prefix = self.conf.get('mail','title_prefix')
+            self.mail_bill_name = self.conf.get('mail','bill_name')
 
             self.me=self.mail_user+"<"+self.mail_user+"@"+self.mail_postfix+">"
             self.msg = email.MIMEMultipart.MIMEMultipart()
 
             self.msg=MIMEText(content,_subtype='html',_charset="utf-8")
-            self.msg['Subject'] = self.mail_title_prefix+dt.strftime('%Y/%m')+self.mail_bill_name
+            self.msg['Subject'] = self.mail_title_prefix.decode('gbk')+dt.strftime('%Y/%m')+self.mail_bill_name.decode('gbk')
+
             self.msg['From'] = self.me
-            self.msg['To'] = ";".join(to_list)
+            self.msg['To'] = to_list
             self.msg['date'] = ctime()
+
+
 
         try:
             self.s.sendmail(self.me, to_list, self.msg.as_string())
@@ -298,6 +306,7 @@ if __name__ == '__main__':
     for i in range(1, msg_count):
         msg_body = w1.msg_generator(msg_buff[i])
         mailto_list = msg_buff[i][keyword_map["email"]]
+
         sleep(0.1)
         if w2.send(mailto_list,msg_body):
             try:
